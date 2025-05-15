@@ -1,61 +1,39 @@
 import discord
-from discord.ext import commands, tasks
-import requests
-import datetime
-import config
+import os
 
 intents = discord.Intents.default()
-intents.messages = True
+intents.message_content = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+client = discord.Client(intents=intents)
 
-def get_economic_calendar(country):
-    url = f"https://api.tradingeconomics.com/calendar/country/{country}?c={config.TRADING_ECONOMICS_API_KEY}"
-    response = requests.get(url)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        return None
+# Keywords aus keywords.txt laden
+def load_keywords():
+    with open('keywords.txt', 'r', encoding='utf-8') as f:
+        return [line.strip().lower() for line in f if line.strip()]
 
-@bot.event
+KEYWORDS = load_keywords()
+
+# Channel-ID aus Umgebungsvariable
+TARGET_CHANNEL_ID = int(os.getenv("TARGET_CHANNEL_ID"))
+
+@client.event
 async def on_ready():
-    print(f"Bot ist eingeloggt als {bot.user}")
-    economic_calendar.start()
+    print(f'Eingeloggt als {client.user}')
+    print(f'Geladene Keywords: {KEYWORDS}')
 
-@tasks.loop(minutes=30)
-async def economic_calendar():
-    now = datetime.datetime.now()
-    current_hour = now.hour
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
 
-    if 8 <= current_hour <= 22:
-        channel = bot.get_channel(config.CHANNEL_ID)
-        today = now.strftime("%Y-%m-%d")
-        
-        germany_data = get_economic_calendar('Germany')
-        usa_data = get_economic_calendar('United States')
+    if message.channel.id != TARGET_CHANNEL_ID:
+        return
 
-        message = f"📅 **Wirtschaftskalender Update {now.strftime('%H:%M')} Uhr**\n\n"
-        
-        if germany_data:
-            message += "🇩🇪 **Deutschland**:\n"
-            for event in germany_data:
-                if event['Date'].startswith(today):
-                    message += f"- {event['Date'][11:16]} Uhr: {event['Event']}\n"
-        else:
-            message += "Keine Termine für Deutschland gefunden.\n"
+    content_lower = message.content.lower()
+    if any(word in content_lower for word in KEYWORDS):
+        try:
+            await message.add_reaction("🤗")
+        except discord.HTTPException:
+            pass
 
-        message += "\n"
-        
-        if usa_data:
-            message += "🇺🇸 **USA**:\n"
-            for event in usa_data:
-                if event['Date'].startswith(today):
-                    message += f"- {event['Date'][11:16]} Uhr: {event['Event']}\n"
-        else:
-            message += "Keine Termine für USA gefunden.\n"
-
-        await channel.send(message)
-    else:
-        print(f"Ignoriert um {now.strftime('%H:%M')} (außerhalb 8-22 Uhr)")
-
-bot.run(config.DISCORD_TOKEN)
+client.run(os.getenv("DISCORD_TOKEN"))
