@@ -1,6 +1,5 @@
 # Ignoriere die .env-Datei, um Geheimnisse zu schützen
 .env
 
-# Ignoriere Python Cache-Dateien
 __pycache__/
 *.pyc
